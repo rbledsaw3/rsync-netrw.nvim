@@ -14,6 +14,18 @@ local cfg = {
 }
 
 -- ===== Utils =====
+local function shell_quote(str)
+    if not str or str == "" then return "" end
+    return "'" .. tostring(str):gsub("'", [["'"']]) .. "'"
+end
+
+local function has_flag(flags, want)
+    for _, f in ipairs(flags or {}) do
+        if f == want then return true end
+    end
+    return false
+end
+
 local function in_netrw()
     return vim.bo.filetype == "netrw" and vim.b.netrw_curdir ~= nil
 end
@@ -59,22 +71,45 @@ local function clear_all_visual(buf)
 end
 
 -- ===== Public actions =====
-local function build_argv(paths)
-    local argv = { "rsync" }
-    for _, flag in ipairs(cfg.rsync_flags or {}) do table.insert(argv, flag) end
-    if cfg.use_relative then table.insert(argv, "--relative") end
-    for _, flag in ipairs(cfg.extra or {}) do table.insert(argv, flag) end
+
+local function build_cmd(paths)
+    local parts = { "rsync" }
+    local norm_flags = {}
+    for _, f in ipairs(cfg.rsync_flags or {}) do
+        if f ~= nil and f ~= "" then
+            if f:sub(1,1) ~= "-" then f = "-" .. f end
+            table.insert(norm_flags, f)
+        end
+    end
+
+    local needs_r = false
+    for _, p in ipairs(paths) do
+        if vim.fn.isdirectory(p) == 1 then needs_r = true; break end
+    end
+    if needs_r and not (has_flag(norm_flags, "-a") or has_flag(norm_flags, "-r")) then
+        table.insert(norm_flags, "-r")
+    end
+
+    for _, f in ipairs(norm_flags) do table.insert(parts, shell_quote(f)) end
+    if cfg.use_relative then table.insert(parts, "--relative") end
+    for _, x in ipairs(cfg.extra or {}) do
+        if x ~= nil and x ~= "" then
+            if x:sub(1,1) == "-" then table.insert(parts, x) else table.insert(parts, shell_quote(x)) end
+        end
+    end
+
     if cfg.ssh and #cfg.ssh > 0 then
         local ssh_join = "ssh"
         for _, s in ipairs(cfg.ssh) do
             ssh_join = ssh_join .. " " .. vim.fn.shellescape(s)
         end
-        table.insert(argv, "-e")
-        table.insert(argv, ssh_join)
+        table.insert(parts, "-e")
+        table.insert(parts, shell_quote(ssh_join))
     end
-    for _, path in ipairs(paths) do table.insert(argv, path) end
-    table.insert(argv, cfg.dest)
-    return argv
+
+    for _, p in ipairs(paths) do table.insert(parts, shell_quote(p)) end
+    table.insert(parts, shell_quote(cfg.dest))
+    return table.concat(parts, " ")
 end
 
 local function open_float_term(argv)
@@ -89,7 +124,7 @@ local function open_float_term(argv)
         style = "minimal", border = "rounded",
         title = " rsync upload ", title_pos = "center",
     })
-    vim.fn.termopen(argv, {
+    vim.fn.termopen({ "bash", "-lc", cmd }, {
         on_exit = function(_, code)
             vim.schedule(function()
                 local ok = (code == 0)
@@ -152,8 +187,8 @@ function M.upload_marked()
         return
     end
     table.sort(paths)
-    local argv = build_argv(paths)
-    open_float_term(argv)
+    local cmd = build_cmd(paths)
+    open_float_term(cmd)
 end
 
 function M.upload_marked_remove()
@@ -168,8 +203,8 @@ function M.upload_marked_remove()
     local old_extra = cfg.extra
     cfg.extra = vim.deepcopy(cfg.extra or {})
     table.insert(cfg.extra, "--remove-source-files")
-    local argv = build_argv(paths)
-    open_float_term(argv)
+    local cmd = build_cmd(paths)
+    open_float_term(cmd)
     cfg.extra = old_extra
 end
 
