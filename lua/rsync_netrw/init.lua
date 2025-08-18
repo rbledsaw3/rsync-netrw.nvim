@@ -112,7 +112,11 @@ local function build_cmd(paths)
     return table.concat(parts, " ")
 end
 
-local function open_float_term(argv)
+local function open_float_term(cmd)
+    if not cmd or cmd == "" then
+        vim.notify("No command to run", vim.log.levels.ERROR)
+        return
+    end
     local width = math.floor(vim.o.columns * 0.9)
     local height = math.floor(vim.o.lines * 0.8)
     local row = math.floor((vim.o.lines - height) / 2)
