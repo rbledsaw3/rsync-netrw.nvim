@@ -19,7 +19,7 @@ Pure Lua. Minimal UI. No netrw internals poked.
 
 ```lua
 {
-  "yourname/rsync-netrw.nvim",
+  "rbledsaw3/rsync-netrw.nvim",
   ft = "netrw",
   opts = {
     dest = "destination_user@destination_ip:/path/to/destination", -- placeholder
