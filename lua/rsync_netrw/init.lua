@@ -26,6 +26,14 @@ local function has_flag(flags, want)
     return false
 end
 
+local function normalize_path(path)
+    if not path or path == "" then return nil end
+    if vim.fn.isdirectory(path) == 1 then
+        return (path:gsub("/+$", ""))
+    end
+    return path
+end
+
 local function in_netrw()
     return vim.bo.filetype == "netrw" and vim.b.netrw_curdir ~= nil
 end
@@ -90,7 +98,7 @@ local function build_cmd(paths)
         table.insert(norm_flags, "-r")
     end
 
-    for _, f in ipairs(norm_flags) do table.insert(parts, shell_quote(f)) end
+    for _, f in ipairs(norm_flags) do table.insert(parts, f) end
     if cfg.use_relative then table.insert(parts, "--relative") end
     for _, x in ipairs(cfg.extra or {}) do
         if x ~= nil and x ~= "" then
@@ -107,7 +115,12 @@ local function build_cmd(paths)
         table.insert(parts, shell_quote(ssh_join))
     end
 
-    for _, p in ipairs(paths) do table.insert(parts, shell_quote(p)) end
+    for _, p in ipairs(paths) do
+        p = normalize_path(p)
+        if p and p ~= "" then
+            table.insert(parts, shell_quote(p))
+        end
+    end
     table.insert(parts, shell_quote(cfg.dest))
     return table.concat(parts, " ")
 end
