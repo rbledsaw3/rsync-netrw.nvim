@@ -21,8 +21,11 @@ end
 local function current_path()
     if not in_netrw() then return nil end
     local dir = vim.b.netrw_curdir or ""
-    local name = vim.fn.expand("<cfile>")
-    if not name or name == "" or name == "." or name == ".." then return nil end
+    local saved = vim.o.isfname
+    vim.o.isfname = saved .. ",32,38,40,41,44,59,61,91,93,123,125"
+    local ok, name = pcall(vim.fn.expand, "<cfile>")
+    vim.o.isfname = saved
+    if not ok or not name or name == "" or name == "." or name == ".." then return nil end
     return vim.fn.fnamemodify(dir .. "/" .. name, ":p")
 end
 
