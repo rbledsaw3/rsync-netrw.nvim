@@ -6,6 +6,7 @@ Pure Lua. Minimal UI. No netrw internals poked.
 ## Features
 - `mm` toggle mark on the current netrw entry (shows a green dot at EOL)
 - `mu` / `:RsyncUpload` uploads all marked files with `rsync`
+- `mU` / `:RsyncUploadRemove` uploads all marked files with `rsync --remove-source-files`
 - `mC` / `:RsyncClearMarks` clears all marks
 - `:RsyncSetDestination user@host:/path` sets the remote destination for this session
 - Floating terminal shows `rsync` progress
@@ -32,6 +33,7 @@ Pure Lua. Minimal UI. No netrw internals poked.
     { "mm", function() require("rsync_netrw").toggle_mark() end, ft = "netrw", desc = "Rsync: toggle mark" },
     { "mC", function() require("rsync_netrw").clear_marks() end,  ft = "netrw", desc = "Rsync: clear marks" },
     { "mu", function() require("rsync_netrw").upload_marked() end, ft = "netrw", desc = "Rsync: upload marked" },
+    { "mU", function() require("rsync_netrw").upload_marked_remove() end, ft = "netrw", desc = "Rsync: Upload and remove source files" },
   },
 }
 ```
@@ -43,6 +45,7 @@ If you use LazyVim, drop that spec in `~/.config/nvim/lua/plugins/rsync_netrw.lu
 2. `mm` to mark entries.
 3. `:RsyncSetDestination user@host:/path` once per session.
 4. `mu` (or `:RsyncUpload`) to send the marked files.
+5. `mU` (or `:RsyncUploadRemove`) to send the marked files and delete from source afterwards.
 
 If the destination is still the placeholder, the plugin will error and prompt you to run `:RsyncSetDestination`.
 
@@ -53,7 +56,7 @@ If the destination is still the placeholder, the plugin will error and prompt yo
 - `ssh` - optional list of extra ssh args; if set, we pass `-e 'ssh ...'`
 - `use_relative` - if `true`, adds `--relative` to preserve path portions
 - `extra` - additional rsync args, e.g. `{ "--delete-after" }`
-- `keymaps` - install the default netrw keymaps (`mm`/`mC`/`mu`)
+- `keymaps` - install the default netrw keymaps (`mm`/`mC`/`mu`/`mU`)
 
 ## License
 

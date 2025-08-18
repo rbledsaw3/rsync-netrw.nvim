@@ -195,7 +195,7 @@ function M.setup(opts)
                 vim.keymap.set("n", "mm", M.toggle_mark,    { buffer = buf, desc = "Rsync: Toggle mark under cursor" })
                 vim.keymap.set("n", "mu", M.upload_marked,  { buffer = buf, desc = "Rsync: Upload marked files" })
                 vim.keymap.set("n", "mC", M.clear_marks,    { buffer = buf, desc = "Rsync: Clear all marks" })
-                vim.keymap.set("n", "mur", M.upload_marked_remove, { buffer = buf, desc = "Rsync: Upload and remove source files" })
+                vim.keymap.set("n", "mU", M.upload_marked_remove, { buffer = buf, desc = "Rsync: Upload and remove source files" })
             end,
         })
     end
