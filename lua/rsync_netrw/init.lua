@@ -91,9 +91,12 @@ local function open_float_term(argv)
     })
     vim.fn.termopen(argv, {
         on_exit = function(_, code)
-            local msg = (code == 0) and "[DONE} rsync completed successfully"
-                                        or "[ERROR] rsync exited with code " .. code
-            vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", msg })
+            vim.schedule(function()
+                local ok = (code == 0)
+                local level = ok and vim.log.levels.INFO or vim.log.levels.ERROR
+                local msg = ok and "rsync upload completed successfully" or ("rsync exited with code " .. code)
+                vim.notify(msg, level)
+            end)
         end,
     })
     vim.cmd.startinsert()
@@ -153,6 +156,23 @@ function M.upload_marked()
     open_float_term(argv)
 end
 
+function M.upload_marked_remove()
+    if not ensure_dest() then return end
+    local paths = {}
+    for p, on in pairs(marks) do if on then table.insert(paths, p) end end
+    if #paths == 0 then
+        vim.notify("No marked files to upload", vim.log.levels.WARN)
+        return
+    end
+    table.sort(paths)
+    local old_extra = cfg.extra
+    cfg.extra = vim.deepcopy(cfg.extra or {})
+    table.insert(cfg.extra, "--remove-source-files")
+    local argv = build_argv(paths)
+    open_float_term(argv)
+    cfg.extra = old_extra
+end
+
 -- ===== Commands =====
 function M.set_destination(dest)
     if not dest or dest == "" then
@@ -175,6 +195,7 @@ function M.setup(opts)
                 vim.keymap.set("n", "mm", M.toggle_mark,    { buffer = buf, desc = "Rsync: Toggle mark under cursor" })
                 vim.keymap.set("n", "mu", M.upload_marked,  { buffer = buf, desc = "Rsync: Upload marked files" })
                 vim.keymap.set("n", "mC", M.clear_marks,    { buffer = buf, desc = "Rsync: Clear all marks" })
+                vim.keymap.set("n", "mur", M.upload_marked_remove, { buffer = buf, desc = "Rsync: Upload and remove source files" })
             end,
         })
     end
@@ -192,6 +213,7 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("RsyncSetDestination", function(p) M.set_destination(p.args) end, { nargs = 1 })
     vim.api.nvim_create_user_command("RsyncUpload", function() M.upload_marked() end, {})
     vim.api.nvim_create_user_command("RsyncClearMarks", function() M.clear_marks() end, {})
+    vim.api.nvim_create_user_command("RsyncUploadRemove", function() M.upload_marked_remove() end, {})
 end
 
 return M
