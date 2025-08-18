@@ -1,0 +1,3 @@
+-- This runs for non-manager installs. Safe default.
+-- Commented out by default-Lazy users configure via opts anyway.
+-- require("rsync_netrw").setup()
