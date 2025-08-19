@@ -246,6 +246,20 @@ local function open_float_term(cmd, on_success)
     vim.cmd.startinsert()
 end
 
+local function refresh_netrw_window()
+    local cur_win = vim.api.nvim_get_current_win()
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+        local b = vim.api.nvim_win_get_buf(w)
+        if vim.api.nvim_buf_is_loaded(b) and vim.bo[b].filetype == "netrw" then
+            vim.api.nvim_set_current_win(w)
+            vim.cmd([[silent! noautocmd normal! \<C-l>]])
+        end
+    end
+    pcall(vim.api.nvim_set_current_win, cur_win)
+end
+
+-- ===== Marking functions =====
+
 function M.toggle_mark()
     if not in_netrw() then
         vim.notify("Not in a netrw buffer", vim.log.levels.WARN)
@@ -319,6 +333,7 @@ function M.upload_marked_remove()
     open_float_term(cmd, function()
         cleanup_empty_dirs(dirs_to_try)
         M.clear_marks()
+        refresh_netrw_window()
     end)
     cfg.extra = old_extra
 end
