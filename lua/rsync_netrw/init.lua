@@ -34,6 +34,12 @@ local function normalize_path(path)
     return path
 end
 
+local function path_depth(p)
+    local n = 0
+    for _ in p:gmatch("[^/]+") do n = n + 1 end
+    return n
+end
+
 local function is_dir_empty(path)
     local fs = vim.loop
     local req = fs.fs_scandir(path)
@@ -48,16 +54,25 @@ end
 
 local function cleanup_empty_dirs(dirs)
     if not dirs or #dirs == 0 then return end
-    table.sort(dirs, function(a, b) return #a > #b end)
-    local removed = {}
-    for _, d in ipairs(dirs) do
-        if vim.fn.isdirectory(d) == 1 and is_dir_empty(d) then
-            local ok = pcall(vim.loop.fs_rmdir, d)
-            if ok then table.insert(removed, d) end
+    table.sort(dirs, function(a, b) return path_depth(a) > path_depth(b) end)
+    local removed_total = {}
+    local changed = true
+    while changed do
+        changed = false
+        local removed = {}
+        for _, d in ipairs(dirs) do
+            if vim.fn.isdirectory(d) == 1 and is_dir_empty(d) then
+                local ok = pcall(vim.loop.fs_rmdir, d)
+                if ok then
+                    table.insert(removed, d)
+                    changed = true
+                end
+            end
         end
+        vim.list_extend(removed_total, removed)
     end
-    if #removed > 0 then
-        vim.notify("Removed empty directories:\n" .. table.concat(removed, "\n"), vim.log.levels.INFO)
+    if #removed_total > 0 then
+        vim.notify("Removed empty directories:\n" .. table.concat(removed_total, "\n"), vim.log.levels.INFO)
     end
 end
 
