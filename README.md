@@ -4,16 +4,18 @@ Mark files in **netrw** and upload them with **rsync over SSH**.
 Pure Lua. Minimal UI. No netrw internals poked.
 
 ## Features
-- `mm` toggle mark on the current netrw entry (shows a green dot at EOL)
+- `mm` toggle mark on the current netrw entry (shows a green dot at EOL using `DiagnosticOk` or falls back on `DiffAdded`)
 - `mu` / `:RsyncUpload` uploads all marked files with `rsync`
 - `mU` / `:RsyncUploadRemove` uploads all marked files with `rsync --remove-source-files`
+    - Preserves directory structure on the destination (e.g. `Fish Pictures` → `/backup/Fish Pictures`)
+    - After transfer, any marked directories that become empty will be automatically removed locally
 - `mC` / `:RsyncClearMarks` clears all marks
 - `:RsyncSetDestination user@host:/path` sets the remote destination for this session
-- Floating terminal shows `rsync` progress
+- Floating terminal shows `rsync` progress and completion notifications
 
 ## Requirements
 - Neovim 0.8+
-- `rsync` and `ssh` in PATH
+- `rsync` and `ssh` must be installed and available in your `PATH`
 
 ## Install (lazy.nvim / LazyVim)
 
@@ -46,6 +48,8 @@ If you use LazyVim, drop that spec in `~/.config/nvim/lua/plugins/rsync_netrw.lu
 3. `:RsyncSetDestination user@host:/path` once per session.
 4. `mu` (or `:RsyncUpload`) to send the marked files.
 5. `mU` (or `:RsyncUploadRemove`) to send the marked files and delete from source afterwards.
+    - Delete source files after successful upload
+    - Remove any empty marked directories
 
 If the destination is still the placeholder, the plugin will error and prompt you to run `:RsyncSetDestination`.
 

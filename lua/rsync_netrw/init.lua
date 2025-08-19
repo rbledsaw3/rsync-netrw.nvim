@@ -34,6 +34,33 @@ local function normalize_path(path)
     return path
 end
 
+local function is_dir_empty(path)
+    local fs = vim.loop
+    local req = fs.fs_scandir(path)
+    if not req then return true end
+    while true do
+        local name, _ = fs.fs_scandir_next(req)
+        if not name then break end
+        if name ~= "." and name ~= ".." then return false end
+    end
+    return true
+end
+
+local function cleanup_empty_dirs(dirs)
+    if not dirs or #dirs == 0 then return end
+    table.sort(dirs, function(a, b) return #a > #b end)
+    local removed = {}
+    for _, d in ipairs(dirs) do
+        if vim.fn.isdirectory(d) == 1 and is_dir_empty(d) then
+            local ok = pcall(vim.loop.fs_rmdir, d)
+            if ok then table.insert(removed, d) end
+        end
+    end
+    if #removed > 0 then
+        vim.notify("Removed empty directories:\n" .. table.concat(removed, "\n"), vim.log.levels.INFO)
+    end
+end
+
 local function in_netrw()
     return vim.bo.filetype == "netrw" and vim.b.netrw_curdir ~= nil
 end
@@ -55,12 +82,14 @@ local function ensure_buf_table(buf)
 end
 
 local function add_mark_visual(buf, line_nr)
-  local vt = { { " ●", "DiagnosticOk" } } -- eol dot (green)
-  return vim.api.nvim_buf_set_extmark(buf, ns, line_nr - 1, -1, {
-    virt_text = vt,
-    virt_text_pos = "eol",
-    hl_mode = "combine",
-  })
+    local ok = pcall(vim.api.nvim_get_hl, 0, { name = "DiagnosticOk", link = false })
+    local group = ok and "DiagnosticOk" or "DiffAdded"
+    local vt = { { " ●", group } } -- eol dot (green)
+    return vim.api.nvim_buf_set_extmark(buf, ns, line_nr - 1, -1, {
+        virt_text = vt,
+        virt_text_pos = "eol",
+        hl_mode = "combine",
+    })
 end
 
 local function ensure_dest()
@@ -81,6 +110,10 @@ end
 -- ===== Public actions =====
 
 local function build_cmd(paths)
+    if vim.fn.executable("rsync") ~= 1 then
+        vim.notify("rsync executable not found in PATH", vim.log.levels.ERROR)
+        return ""
+    end
     local parts = { "rsync" }
     local norm_flags = {}
     for _, f in ipairs(cfg.rsync_flags or {}) do
@@ -125,7 +158,7 @@ local function build_cmd(paths)
     return table.concat(parts, " ")
 end
 
-local function open_float_term(cmd)
+local function open_float_term(cmd, on_success)
     if not cmd or cmd == "" then
         vim.notify("No command to run", vim.log.levels.ERROR)
         return
@@ -148,6 +181,7 @@ local function open_float_term(cmd)
                 local level = ok and vim.log.levels.INFO or vim.log.levels.ERROR
                 local msg = ok and "rsync upload completed successfully" or ("rsync exited with code " .. code)
                 vim.notify(msg, level)
+                if ok and type(on_success) == "function" then pcall(on_success) end
             end)
         end,
     })
@@ -210,8 +244,15 @@ end
 
 function M.upload_marked_remove()
     if not ensure_dest() then return end
-    local paths = {}
-    for p, on in pairs(marks) do if on then table.insert(paths, p) end end
+    local paths, dirs = {}, {}
+    for p, on in pairs(marks) do
+        if on then
+            table.insert(paths, p)
+            if vim.fn.isdirectory(p) == 1 then
+                table.insert(dirs, normalize_path(p))
+            end
+        end
+    end
     if #paths == 0 then
         vim.notify("No marked files to upload", vim.log.levels.WARN)
         return
@@ -221,7 +262,10 @@ function M.upload_marked_remove()
     cfg.extra = vim.deepcopy(cfg.extra or {})
     table.insert(cfg.extra, "--remove-source-files")
     local cmd = build_cmd(paths)
-    open_float_term(cmd)
+    open_float_term(cmd, function()
+        cleanup_empty_dirs(dirs)
+        M.clear_marks()
+    end)
     cfg.extra = old_extra
 end
 
