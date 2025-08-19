@@ -1,0 +1,143 @@
+diff --git a/lua/rsync_netrw/init.lua b/lua/rsync_netrw/init.lua
+index c1ce130..7a5c4eb 100644
+--- a/lua/rsync_netrw/init.lua
++++ b/lua/rsync_netrw/init.lua
+@@ -7,13 +7,15 @@ local marks_by_buf = {}     -- buf -> { [line]=extmark_id }
+ local cfg = {
+     dest = "destination_user@destination_host:/path/to/destination/",   -- REQUIRED: change me
+     ssh = {},                                   -- ssh args for rsync -e 'ssh <args...>'
+-    rsync_flags = { "-avhP", "--progress" },    -- default rsync flags
++    rsync_flags = { "-avhP" },    -- default rsync flags
+     use_relative = false,                       -- if true, pass --relative to rsync
+     extra = {},                                 -- extra rsync flags
+     keymaps = true,                             -- whether to set keymaps
+ }
+ 
+ -- ===== Utils =====
++local uv = vim.loop
++
+ local function shell_quote(str)
+     if not str or str == "" then return "" end
+     return "'" .. tostring(str):gsub("'", [["'"']]) .. "'"
+@@ -41,20 +43,63 @@ local function path_depth(p)
+ end
+ 
+ local function is_dir_empty(path)
+-    local fs = vim.loop
+-    local req = fs.fs_scandir(path)
++    local req = uv.fs_scandir(path)
+     if not req then return true end
+     while true do
+-        local name, _ = fs.fs_scandir_next(req)
++        local name, _ = uv.fs_scandir_next(req)
+         if not name then break end
+-        if name ~= "." and name ~= ".." then return false end
++        return false
+     end
+     return true
+ end
+ 
++local function list_all_subdirs(root)
++    local out = {}
++    local function walk(dir)
++        table.insert(out, dir)
++        local req = uv.fs_scandir(dir)
++        if not req then return end
++        while true do
++            local name, t = uv.fs_scandir_next(req)
++            if not name then break end
++            if not t then
++                local st = uv.fs_stat(dir .. "/" .. name)
++                t = st and st.type or nil
++            end
++            if t == "directory" then
++                walk(dir .. "/" .. name)
++            end
++        end
++    end
++    walk(root)
++    return out
++end
++
++local function collect_cleanup_dirs(paths)
++    local seen, dirs = {}, {}
++    local function add(d)
++        d = normalize_path(d)
++        if d and not seen[d] then
++            seen[d] = true
++            table.insert(dirs, d)
++        end
++    end
++
++    for _, p in ipairs(paths) do
++        p = normalize_path(p)
++        if p and p ~= "" and vim.fn.isdirectory(p) == 1 then
++            for _, d in ipairs(list_all_subdirs(p)) do
++                add(d)
++            end
++        end
++    end
++
++    table.sort(dirs, function(a, b) return path_depth(a) > path_depth(b) end)
++    return dirs
++end
++
+ local function cleanup_empty_dirs(dirs)
+     if not dirs or #dirs == 0 then return end
+-    table.sort(dirs, function(a, b) return path_depth(a) > path_depth(b) end)
+     local removed_total = {}
+     local changed = true
+     while changed do
+@@ -62,7 +107,7 @@ local function cleanup_empty_dirs(dirs)
+         local removed = {}
+         for _, d in ipairs(dirs) do
+             if vim.fn.isdirectory(d) == 1 and is_dir_empty(d) then
+-                local ok = pcall(vim.loop.fs_rmdir, d)
++                local ok = pcall(uv.fs_rmdir, d)
+                 if ok then
+                     table.insert(removed, d)
+                     changed = true
+@@ -155,12 +200,10 @@ local function build_cmd(paths)
+     end
+ 
+     if cfg.ssh and #cfg.ssh > 0 then
+-        local ssh_join = "ssh"
+-        for _, s in ipairs(cfg.ssh) do
+-            ssh_join = ssh_join .. " " .. vim.fn.shellescape(s)
+-        end
++        local ssh_join = { "ssh" }
++        vim.list_extend(ssh_join, cfg.ssh)
+         table.insert(parts, "-e")
+-        table.insert(parts, shell_quote(ssh_join))
++        table.insert(parts, shell_quote(table.concat(ssh_join, " ")))
+     end
+ 
+     for _, p in ipairs(paths) do
+@@ -259,14 +302,9 @@ end
+ 
+ function M.upload_marked_remove()
+     if not ensure_dest() then return end
+-    local paths, dirs = {}, {}
++    local paths = {}
+     for p, on in pairs(marks) do
+-        if on then
+-            table.insert(paths, p)
+-            if vim.fn.isdirectory(p) == 1 then
+-                table.insert(dirs, normalize_path(p))
+-            end
+-        end
++        if on then table.insert(paths, p) end
+     end
+     if #paths == 0 then
+         vim.notify("No marked files to upload", vim.log.levels.WARN)
+@@ -277,8 +315,9 @@ function M.upload_marked_remove()
+     cfg.extra = vim.deepcopy(cfg.extra or {})
+     table.insert(cfg.extra, "--remove-source-files")
+     local cmd = build_cmd(paths)
++    local dirs_to_try = collect_cleanup_dirs(paths)
+     open_float_term(cmd, function()
+-        cleanup_empty_dirs(dirs)
++        cleanup_empty_dirs(dirs_to_try)
+         M.clear_marks()
+     end)
+     cfg.extra = old_extra
